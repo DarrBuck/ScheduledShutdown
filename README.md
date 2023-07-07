@@ -1,7 +1,7 @@
 # Scheduled Shutdown
 
 ## Usage
-This is a C# Winforms application that you can run on your Windows PC that allows you to do a schedulled shutdown.
+This is a C# Winforms application that you can run on your Windows PC that allows you to do a scheduled shutdown.
 The shutdown time can be manually entered or you can configure it to automatically pull your area's loadshedding
 schedule from EskomSePush.
 
