@@ -304,6 +304,7 @@ namespace ScheduledShutdown
         {
             isShutdownCancelled = disableCheckBox.Checked;
             Utils.SaveSettingToRegistry("shutdownsDiabled", espLookUpTextBox.Text);
+            UpdateStatusLabel();
         }
 
         #endregion
@@ -313,10 +314,12 @@ namespace ScheduledShutdown
         private static void ShutdownComputer()
         {
             //Write to windows event log that this app is shutting down the computer
-            var log = new EventLog("Appplication");
-            log.Source = "ScheduledShutdown";
+            var log = new EventLog("Appplication")
+            {
+                Source = "ScheduledShutdown"
+            };
             log.WriteEntry("Shutting down the computer", EventLogEntryType.Information, 101, 1);
-                        
+
             // Create a process to execute the shutdown command
             Process? process = new();
             ProcessStartInfo? startInfo = new()
@@ -346,7 +349,7 @@ namespace ScheduledShutdown
             if (nextShutdownDateTime == null) return false;
             var currentTime = DateTime.Now;
             var diff = nextShutdownDateTime - currentTime;
-            mainToolStripStatusLabel2.Text = $"Shutdown in: {diff:hh\\:mm\\:ss}";
+            UpdateStatusLabel($"Shutdown in: {diff:hh\\:mm} hours");
 
             return (diff.Value.TotalMinutes <= 0 && diff.Value.TotalMinutes >= -3);
         }
@@ -381,12 +384,15 @@ namespace ScheduledShutdown
                 }
                 else
                 {
-                    mainToolStripStatusLabel2.Text = "Schedule time passed";
+                    if (nextShutdownDateTime < DateTime.Now)
+                    {
+                        UpdateStatusLabel("Schedule time passed");
+                    }
                 }
             }
             else
             {
-                mainToolStripStatusLabel2.Text = "No shutdown scheduled";
+                UpdateStatusLabel("No shutdown scheduled");
             }
         }
 
@@ -427,6 +433,18 @@ namespace ScheduledShutdown
 
                     throw;
                 }
+            }
+        }
+
+        private void UpdateStatusLabel(string? status = "")
+        {
+            if (isShutdownCancelled)
+            {
+                mainToolStripStatusLabel2.Text = "Shutdown cancelled";
+            }
+            else
+            {
+                mainToolStripStatusLabel2.Text = status;
             }
         }
 

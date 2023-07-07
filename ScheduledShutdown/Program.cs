@@ -33,8 +33,6 @@ namespace ScheduledShutdown
 
         static IHostBuilder CreateHostBuilder()
         {
-            Utils utils = new Utils();
-
             var licenseKey = Utils.GetSettingFromRegistry("espToken");
             Action<SePushOptions> config = (options) =>
             {
