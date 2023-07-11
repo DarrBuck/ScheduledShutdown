@@ -14,8 +14,9 @@
     <Platforms>AnyCPU</Platforms>
     <ApplicationIcon>flash.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-	<PublishSingleFile>true</PublishSingleFile>
-	<SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>  
   </PropertyGroup>
 
   <ItemGroup>
