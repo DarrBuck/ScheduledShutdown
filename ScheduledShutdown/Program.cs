@@ -34,10 +34,10 @@ namespace ScheduledShutdown
         static IHostBuilder CreateHostBuilder()
         {
             var licenseKey = Utils.GetSettingFromRegistry("espToken");
-            Action<SePushOptions> config = (options) =>
+            void config(SePushOptions options)
             {
                 options.Token = licenseKey;
-            };
+            }
 
             IConfigureOptions<SePushOptions> configureOptions = new ConfigureOptions<SePushOptions>(config);
 
