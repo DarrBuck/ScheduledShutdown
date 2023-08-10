@@ -35,6 +35,7 @@
   <ItemGroup>
     <PackageReference Include="helloserve.SePush" Version="1.0.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.1" />
+    <PackageReference Include="NUTDotNetClient" Version="0.2.0-alpha" />
   </ItemGroup>
 
   <ItemGroup>

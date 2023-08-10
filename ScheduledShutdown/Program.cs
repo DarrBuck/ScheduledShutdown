@@ -19,7 +19,6 @@ namespace ScheduledShutdown
             // see https://aka.ms/applicationconfiguration.
             ApplicationConfiguration.Initialize();
 
-
             var host = CreateHostBuilder().Build();
             ServiceProvider = host.Services;
 

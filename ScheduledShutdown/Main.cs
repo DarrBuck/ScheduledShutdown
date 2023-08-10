@@ -1,5 +1,9 @@
 using helloserve.SePush;
 using helloserve.SePush.Models;
+using NUTDotNetClient;
+using NUTDotNetShared;
+using ScheduledShutdown.Models;
+using ScheduledShutdown.Services;
 using System.Data;
 using System.Diagnostics;
 
@@ -15,9 +19,19 @@ namespace ScheduledShutdown
         private string? licenseKey = "";
         private string? areaId = "eskde-10-fourwaysext10cityofjohannesburggauteng"; //default to JHB for tetsing
         private bool useEsp = false;
+        private bool useNUT = false;
         private bool isShutdownCancelled = false;
         private readonly ISePush espClient;
         private DateTime? nextShutdownDateTime = null;
+
+        private WinNUTService? winNutService = null;
+        private string? nutHost;
+        private string? nutUserName;
+        private string? nutPassword;
+        private string? nutStatus;
+        private string? nutCharge;
+        private int nutShutdownMinutes = 0;
+        private ClientUPS? nutUps;
 
         public Main(ISePush sePushClient)
         {
@@ -36,7 +50,7 @@ namespace ScheduledShutdown
             trayIconContextMenu = new ContextMenuStrip();
             trayIconContextMenu.Items.Add("Settings", null, new EventHandler(Settings_Click));
             trayIconContextMenu.Items.Add("Exit", null, Exit_Click);
-            trayIconContextMenu.Items.Add("Shutdown", null, new EventHandler(ShutdownMenuItem_Click));
+            trayIconContextMenu.Items.Add("Shutdown PC", null, new EventHandler(ShutdownMenuItem_Click));
 
             // Assign the context menu to the NotifyIcon
             notifyIcon.ContextMenuStrip = trayIconContextMenu;
@@ -52,13 +66,35 @@ namespace ScheduledShutdown
 
         private async void Main_LoadAsync(object sender, EventArgs e)
         {
+            //ESP Settings
             useEsp = Utils.GetSettingFromRegistry("espUse") == "True";
             espSettingsGroupBox.Visible = useEsp;
             espUseCheckBox.Checked = useEsp;
             licenseKey = Utils.GetSettingFromRegistry("espToken");
             espTokenTextBox.Text = licenseKey;
             //useEsp = false; //uncomment when api needed
+            espTimer.Enabled = useEsp;
 
+            //NUT Settings
+            useNUT = Utils.GetSettingFromRegistry("nutUse") == "True";
+            nutTimer.Enabled = useNUT;
+            nutUseCheckBox.Checked = useNUT;
+
+            nutHost = Utils.GetSettingFromRegistry("nutHost");
+            nutHostTextBox.Text = nutHost;
+            nutUserName = Utils.GetSettingFromRegistry("nutUserName");
+            nutUserNameTextBox.Text = nutUserName;
+            nutPassword = Utils.GetSettingFromRegistry("nutPassword");
+            nutPasswordTextBox.Text = nutPassword;
+            if (int.TryParse(Utils.GetSettingFromRegistry("nutShutdownTime"), out int nutShutdownMinutes))
+            {
+                nutShutdownTime.Value = nutShutdownMinutes;
+            }
+
+            if (useNUT)
+            {
+                CheckUpsStatus(); //call initial
+            }
 
             if (DateTime.TryParse(Utils.GetSettingFromRegistry("nextShutdownDate"), out DateTime nextShutdownDate))
             {
@@ -89,7 +125,7 @@ namespace ScheduledShutdown
             shutdownAlertCheckBox.Checked = Utils.GetSettingFromRegistry("shutdownAlert") == "True";
             espLookUpTextBox.Text = Utils.GetSettingFromRegistry("espArea");
             addToStartupCheckBox.Checked = Utils.CheckMachineStartup(appName, appPath);
-            disableCheckBox.Checked = Utils.GetSettingFromRegistry("shutdownsDiabled") == "True";
+            disableCheckBox.Checked = Utils.GetSettingFromRegistry("shutdownsDisabled") == "True";
 
             areaId = espLookUpTextBox.Text;
             isShutdownCancelled = disableCheckBox.Checked;
@@ -101,19 +137,19 @@ namespace ScheduledShutdown
                 try
                 {
                     await UpdateEskomEvents();
-                    mainToolStripStatusLabel1.ForeColor = Color.Green;
-                    mainToolStripStatusLabel1.Text = "Connected to ESP";
+                    espToolStripStatusLabel.ForeColor = Color.Green;
+                    espToolStripStatusLabel.Text = "Connected to ESP";
                 }
                 catch (Exception ex)
                 {
-                    mainToolStripStatusLabel1.ForeColor = Color.Red;
-                    mainToolStripStatusLabel1.Text = "Error connecting to ESP: " + ex.Message;
+                    espToolStripStatusLabel.ForeColor = Color.Red;
+                    espToolStripStatusLabel.Text = "Error connecting to ESP: " + ex.Message;
                 }
             }
             else
             {
-                mainToolStripStatusLabel1.ForeColor = Color.SteelBlue;
-                mainToolStripStatusLabel1.Text = "Not connected to ESP";
+                espToolStripStatusLabel.ForeColor = Color.SteelBlue;
+                espToolStripStatusLabel.Text = "Not connected to ESP";
             }
 
         }
@@ -176,13 +212,14 @@ namespace ScheduledShutdown
             if (result == DialogResult.Yes)
             {
                 // Call the Shutdown Computer method to initiate the shutdown
-                ShutdownComputer();
+                ShutdownComputer("Shutdown Menu");
             }
         }
 
         private void EspTokenTextBox_TextChanged(object sender, EventArgs e)
         {
             Utils.SaveSettingToRegistry("espToken", espTokenTextBox.Text);
+
             licenseKey = espTokenTextBox.Text;
         }
 
@@ -192,9 +229,21 @@ namespace ScheduledShutdown
 
             Utils.SaveSettingToRegistry("espUse", espUseCheckBox.Checked.ToString());
 
+            espTimer.Enabled = useEsp;
             espSettingsGroupBox.Visible = useEsp;
+        }
+
+        private void NutUseCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            useNUT = nutUseCheckBox.Checked;
+
+            Utils.SaveSettingToRegistry("nutUse", espUseCheckBox.Checked.ToString());
+
+            nutTimer.Enabled = useNUT;
+            nutSettingsGroupBox.Visible = useNUT;
 
         }
+
         private void AddToStartupCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             var addToStartUp = addToStartupCheckBox.Checked;
@@ -296,14 +345,14 @@ namespace ScheduledShutdown
                 var selectedArea = espAreaListBox.SelectedItem as Area;
                 espLookUpTextBox.Text = selectedArea?.Id;
                 espAreaListBox.SelectedIndex = -1;
-                Utils.SaveSettingToRegistry("espArea", espLookUpTextBox.Text);
+                Utils.SaveSettingToRegistry("espArea", espLookUpTextBox.Text ?? "");
                 areaId = espLookUpTextBox.Text;
             }
         }
         private void DisableCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             isShutdownCancelled = disableCheckBox.Checked;
-            Utils.SaveSettingToRegistry("shutdownsDiabled", espLookUpTextBox.Text);
+            Utils.SaveSettingToRegistry("shutdownsDisabled", disableCheckBox.Checked.ToString());
             UpdateStatusLabel();
         }
 
@@ -311,12 +360,12 @@ namespace ScheduledShutdown
 
         #region "Private Methods"
 
-        private static void ShutdownComputer()
+        private static void ShutdownComputer(string source)
         {
             //Write to windows event log that this app is shutting down the computer
             var log = new EventLog("Appplication")
             {
-                Source = "ScheduledShutdown"
+                Source = source
             };
             log.WriteEntry("Shutting down the computer", EventLogEntryType.Information, 101, 1);
 
@@ -373,13 +422,13 @@ namespace ScheduledShutdown
                             }
                             else
                             {
-                                ShutdownComputer();
+                                ShutdownComputer("ESP Scheduled Shutdown");
                             }
                         }
                     }
                     else
                     {
-                        ShutdownComputer();
+                        ShutdownComputer("ESP Scheduled Shutdown");
                     }
                 }
                 else
@@ -401,7 +450,7 @@ namespace ScheduledShutdown
 
             if (useEsp && !string.IsNullOrEmpty(areaId))
             {
-                scheduleGroupBox.Text = $"Eskom schedule for {areaId}";
+                espGroupBox.Text = $"Eskom schedule for {areaId}";
                 try
                 {
                     var result = await espClient.AreaInformationAsync(areaId, testMode: testMode);
@@ -422,14 +471,14 @@ namespace ScheduledShutdown
                         {
                             //leave what was there
                         }
-                        scheduleGridView.DataSource = result.Events;
+                        espGridView.DataSource = result.Events;
 
                     }
                 }
                 catch (Exception ex)
                 {
-                    mainToolStripStatusLabel1.ForeColor = Color.Red;
-                    mainToolStripStatusLabel1.Text = "Error connecting to ESP: " + ex.Message;
+                    espToolStripStatusLabel.ForeColor = Color.Red;
+                    espToolStripStatusLabel.Text = "Error connecting to ESP: " + ex.Message;
 
                     throw;
                 }
@@ -440,15 +489,145 @@ namespace ScheduledShutdown
         {
             if (isShutdownCancelled)
             {
-                mainToolStripStatusLabel2.Text = "Shutdown cancelled";
+                timerToolStripStatusLabel.Text = "Shutdown cancelled";
             }
             else
             {
-                mainToolStripStatusLabel2.Text = status;
+                timerToolStripStatusLabel.Text = status;
             }
         }
 
         #endregion
 
+        private void NutTestButton_Click(object sender, EventArgs e)
+        {
+
+            Application.UseWaitCursor = true;
+            Cursor.Current = Cursors.WaitCursor;
+
+            winNutService?.Dispose();
+
+            try
+            {
+                CheckUpsStatus();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "NUT Client", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                espToolStripStatusLabel.ForeColor = Color.Red;
+                espToolStripStatusLabel.Text = "UPS: Error";
+
+                winNutService?.Dispose();
+            }
+
+            Application.UseWaitCursor = false;
+            Cursor.Current = Cursors.Default;
+
+        }
+
+        private void CheckUpsStatus()
+        {
+            try
+            {
+                if (winNutService == null)
+                {
+                    winNutService = new WinNUTService(nutHost, nutUserName, nutPassword);
+                    var ServerVersion = winNutService.UpsClient.SendQuery("VER")[0];
+                    var ProtocolVersion = winNutService.UpsClient.SendQuery("NETVER")[0];
+                    var upses = winNutService.UpsClient.GetUPSes(true);
+                    nutUps = upses[0];
+                    nutUps.Login();
+                }
+
+                if (nutUps != null && nutUps.IsLoggedIn)
+                {
+                    var comamnds = nutUps.GetCommands();
+                    List<UPSVariable> variables = nutUps.GetVariables();
+                    nutGridView.DataSource = variables.Select(s => new UpsVariable { NutDescription = s.Name, NutValue = s.Value }).ToList();
+
+                    nutCharge = nutUps.GetVariable("battery.charge", true).Value;
+                    nutStatus = nutUps.GetVariable("ups.status", true).Value == "OL" ? "Online" : "Offline";
+                    nutToolStripStatusLabel.ForeColor = nutStatus == "Online" ? Color.Green : Color.Red;
+                }
+                else
+                {
+                    nutCharge = "0";
+                    nutStatus = "Unknown";
+                    nutToolStripStatusLabel.ForeColor = Color.Red;
+                }
+            }
+            catch (Exception)
+            {
+                nutCharge = "0";
+                nutStatus = "Unknown";
+                nutToolStripStatusLabel.ForeColor = Color.Orange;
+            }
+
+            nutToolStripStatusLabel.Text = $"UPS: {nutStatus} - Charge: {nutCharge}%";
+
+            if (nutStatus == "Online")
+            {
+                nutShutdownTimer.Enabled = false;
+            }
+            else if (nutStatus == "Offline")
+            {
+                nutTimer.Enabled = false;
+                nutShutdownTimer.Interval = nutShutdownMinutes * 60 * 1000;
+                nutShutdownTimer.Enabled = true;
+            }
+            else
+            {
+                nutTimer.Enabled = true;
+                nutShutdownTimer.Enabled = false;
+            }
+        }
+
+        private void NutHostTextBox_TextChanged(object sender, EventArgs e)
+        {
+            Utils.SaveSettingToRegistry("nutHost", nutHostTextBox.Text);
+            nutHost = nutHostTextBox.Text;
+        }
+
+        private void NutUserNameTextBox_TextChanged(object sender, EventArgs e)
+        {
+            Utils.SaveSettingToRegistry("nutUserName", nutUserNameTextBox.Text);
+            nutUserName = nutUserNameTextBox.Text;
+        }
+
+        private void NutPasswordTextBox_TextChanged(object sender, EventArgs e)
+        {
+            Utils.SaveSettingToRegistry("nutPassword", nutPasswordTextBox.Text);
+            nutPassword = nutPasswordTextBox.Text;
+        }
+
+        private void NutTimer_Tick(object sender, EventArgs e)
+        {
+            CheckUpsStatus();
+        }
+
+
+        private void NutShutdownTime_ValueChanged(object sender, EventArgs e)
+        {
+            Utils.SaveSettingToRegistry("nutShutdownTime", nutShutdownTime.Value.ToString());
+            nutShutdownMinutes = (int)nutShutdownTime.Value;
+        }
+
+        private void NutShutdownTimer_Tick(object sender, EventArgs e)
+        {
+
+            if (shutdownAlertCheckBox.Checked)
+            {
+                if (MessageBox.Show("UPS shutdown time reached", "Shutdown", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) == DialogResult.Cancel)
+                {
+                    isShutdownCancelled = true;
+                    //disableCheckBox.Checked = true;
+                    nutShutdownTimer.Enabled = true;
+                }
+                else
+                {
+                    ShutdownComputer("UPS Scheduled Shutdown");
+                }
+            }
+        }
     }
 }

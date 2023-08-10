@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace ScheduledShutdown
 {
@@ -81,6 +82,7 @@ namespace ScheduledShutdown
                 }
             }
         }
+
     }
-    
+
 }
