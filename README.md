@@ -8,6 +8,7 @@ schedule from EskomSePush.
 The idea being that if you don't have a UPS, (or one that doesn't notify your PC to shutdown), you can configure the app 
 to do a clean shutdown at a scheduled time.
 
+The app also has the ability to monitor a NUT server to shutdown if the UPS loses power.
 ## Remarks
 The app is using the Nuget package [SePush.Net](https://github.com/helloserve/sepush.net) that wraps the EskomSePush API
 in a .Net library.
