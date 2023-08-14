@@ -4,7 +4,7 @@ namespace ScheduledShutdown
 {
     internal class Utils
     {
-        const string registryKey = "SOFTWARE\\SchduledShutdown";
+        const string registryKey = "SOFTWARE\\ScheduledShutdown";
 
         public static void SaveSettingToRegistry(string settingName, string value)
         {
