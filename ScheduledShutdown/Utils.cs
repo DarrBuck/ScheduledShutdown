@@ -1,5 +1,4 @@
 ﻿using Microsoft.Win32;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace ScheduledShutdown
 {
@@ -78,7 +77,7 @@ namespace ScheduledShutdown
                 string? currentValue = key?.GetValue(appName)?.ToString();
                 if (currentValue != null)
                 {
-                   key?.DeleteValue(appName, false);
+                    key?.DeleteValue(appName, false);
                 }
             }
         }
